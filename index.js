@@ -7,15 +7,15 @@ const hvServerUrl = "http://" + hvServerName + ":8000/"
 const hvServerVM = "SessionLocalSummaryView/"
 const rpHV = 'hvData';
 
-const CitrixServerName = "xendesk715.sup.praim.com"
-const CitrixServerUrl = "http://" + CitrixServerName + ":8000/"
-const CitrixServerVM = "Get-BrokerMachine/"
-const rpCitrix = 'ctxData';
+const ctxServerName = "xendesk715.sup.praim.com"
+const ctxServerUrl = "http://" + ctxServerName + ":8000/"
+const ctxServerVM = "Get-BrokerMachine/"
+const rpCtx = 'ctxData';
 
-const ServerCPU = "cpu"
-const ServerRam = "ram"
-const ServerIO = "diskio"
-const ServerMB = "diskusage"
+const serverCPU = "cpu"
+const serverRAM = "ram"
+const serverIO = "diskio"
+const serverMB = "diskusage"
 
 //HV Method 
 function sendHVDataToInflux() {
@@ -37,7 +37,7 @@ function sendHVDataToInflux() {
                 if (sessionData.length == namesData.length) {
                     for (let i = 0; i < sessionData.length; i++) {
                         client.write(hvServerName)
-                            .tag({ app: ['hviewinflux'] })
+                            .tag({ app: [process.env.npm_package_name] })
                             .field({
                                 // from namesdata
                                 "machineorrdsservername": namesData[i].MachineOrRDSServerName,
@@ -65,18 +65,18 @@ function sendHVDataToInflux() {
 
 //Citrix Method 
 function sendCitrixDataToInflux() {
-    client.createDatabase().then(() => client.createRetentionPolicy(rpCitrix, '2h')).then(() => {
+    client.createDatabase().then(() => client.createRetentionPolicy(rpCtx, '2h')).then(() => {
         let GetBrokermachine
         // make a get request to the url
         axios({
             method: 'get',
-            url: CitrixServerUrl + CitrixServerVM,
+            url: ctxServerUrl + ctxServerVM,
             headers: { 'Accept': 'application/json' }, // this api needs this header set for the request
         }).then(res => {
             GetBrokermachine = res.data;
             for (let i = 0; i < GetBrokermachine.length; i++) {
-                client.write(CitrixServerName)
-                    .tag({ app: ['hviewinflux'] })
+                client.write(ctxServerName)
+                    .tag({ app: [process.env.npm_package_name] })
                     .field({
                         "agentversion": GetBrokermachine[i].AgentVersion ? GetBrokermachine[i].AgentVersion : '',
                         "ostype": GetBrokermachine[i].OSType ? GetBrokermachine[i].OSType : '',
@@ -89,7 +89,7 @@ function sendCitrixDataToInflux() {
                         "sessionstate": GetBrokermachine[i].SessionState ? GetBrokermachine[i].SessionState : 0.0,
                         "vdiipaddress": GetBrokermachine[i].IPAddress ? GetBrokermachine[i].IPAddress : ''
                     })
-                    .set({ RP: rpCitrix })
+                    .set({ RP: rpCtx })
                     .then(() => { console.info('write point success(serverCitrixInformation)') })
                     .catch(err => { console.error(err) });
             }
@@ -105,24 +105,24 @@ function sendServerHealthToInflux(server, rp, serverName) {
         // make a get request to the url
         axios({
             method: 'get',
-            url: server + ServerCPU,
+            url: server + serverCPU,
             headers: { 'Accept': 'application/json' },
         }).then(res => {
             cpu = res.data;
             axios({
                 method: 'get',
-                url: server + ServerRam,
+                url: server + serverRAM,
                 headers: { 'Accept': 'application/json' },
             }).then(res => {
                 ram = res.data;
                 axios({
                     method: 'get',
-                    url: server + ServerMB,
+                    url: server + serverMB,
                     headers: { 'Accept': 'application/json' },
                 }).then(res => {
                     mb = res.data;
                     client.write(serverName)
-                        .tag({ app: ['influx'] })
+                        .tag({ app: [process.env.npm_package_name] })
                         .field({
                             "cpu": cpu,
                             "ram": ram,
@@ -142,11 +142,11 @@ function sendServerDiskIOToInflux(server, rp, serverName) {
         // make a get request to the url
         axios({
             method: 'get',
-            url: server + ServerIO,
+            url: server + serverIO,
             headers: { 'Accept': 'application/json' },
         }).then(res => {
             client.write(serverName)
-                .tag({ app: ['hviewinflux'] })
+                .tag({ app: [process.env.npm_package_name] })
                 .field({
                     "diskIO": res.data,
                 })
@@ -158,10 +158,10 @@ function sendServerDiskIOToInflux(server, rp, serverName) {
 }
 
 // horizon view data every 10 minutes
-setInterval(sendHVDataToInflux, 30 * 1000);
+setInterval(sendHVDataToInflux, 600 * 1000);
 
 // xendesk data every 10 minutes
-setInterval(sendCitrixDataToInflux, 30 * 1000);
+setInterval(sendCitrixDataToInflux, 600 * 1000);
 
 // horizon view health every 1 minute
 setInterval(function () { sendServerHealthToInflux(hvServerUrl, rpHV, hvServerName) }, 60 * 1000);
@@ -170,7 +170,7 @@ setInterval(function () { sendServerHealthToInflux(hvServerUrl, rpHV, hvServerNa
 setInterval(function () { sendServerDiskIOToInflux(hvServerUrl, rpHV, hvServerName) }, 10 * 1000);
 
 // xendesk health every 1 minute
-setInterval(function () { sendServerHealthToInflux(CitrixServerUrl, rpCitrix, CitrixServerName) }, 60 * 1000);
+setInterval(function () { sendServerHealthToInflux(ctxServerUrl, rpCtx, ctxServerName) }, 60 * 1000);
 
 // xendesk health every 10 seconds
-setInterval(function () { sendServerDiskIOToInflux(CitrixServerUrl, rpCitrix, CitrixServerName) }, 10 * 1000);
+setInterval(function () { sendServerDiskIOToInflux(ctxServerUrl, rpCtx, ctxServerName) }, 10 * 1000);
