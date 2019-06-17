@@ -39,50 +39,8 @@ function sendHVDataToInflux() {
                 headers: { 'Accept': 'application/json' },
             }).then(res => {
                 sessionData = res.data;
-                if (sessionData.length == namesData.length) {
-                    if (Array.isArray(sessionData)) {
-                        for (let i = 0; i < sessionData.length; i++) {
-                            client.write(hvServerName)
-                                .tag({ app: [process.env.npm_package_name] })
-                                .field({
-                                    // from namesdata
-                                    "machineorrdsservername": namesData[i].MachineOrRDSServerName,
-                                    "agentversion": namesData[i].AgentVersion,
-                                    "desktopname": namesData[i].DesktopName,
-                                    "desktoptype": namesData[i].DesktopType,
-                                    "clientaddress": namesData[i].ClientAddress,
-                                    "clientversion": namesData[i].ClientVersion,
-                                    "username": namesData[i].UserName,
-                                    // from sessiondata
-                                    "sessionprotocol": sessionData[i].SessionProtocol,
-                                    "sessionstate": sessionData[i].SessionState,
-                                    "starttime": sessionData[i].StartTime,
-                                    "disconnecttime": sessionData[i].DisconnectTime
-                                })
-                                .set({ RP: rpHV })
-                                .then(() => { console.info('write point success(serverHVInformation)') })
-                                .catch(err => { console.error(err) });
-                        }
-                    } else {
-                        client.write(hvServerName)
-                            .tag({ app: [process.env.npm_package_name] })
-                            .field({
-                                // from namesdata
-                                "machineorrdsservername": namesData.MachineOrRDSServerName,
-                                "agentversion": namesData.AgentVersion,
-                                "desktopname": namesData.DesktopName,
-                                "desktoptype": namesData.DesktopType,
-                                "clientaddress": namesData.ClientAddress,
-                                "clientversion": namesData.ClientVersion,
-                                "username": namesData.UserName,
-                                // from sessiondata
-                                "sessionprotocol": sessionData.SessionProtocol,
-                                "sessionstate": sessionData.SessionState,
-                                "starttime": sessionData.StartTime,
-                                "disconnecttime": sessionData.DisconnectTime
-                            })
-                    }
-                }
+                sendDataToInflux(hvServerName, namesData, rpHV)
+                sendDataToInflux(hvServerName, sessionData, rpHV)
             }).catch(err => { console.error(err) })
         }).catch(err => { console.error(err) })
     }).catch(err => { console.error(err) })
@@ -91,53 +49,15 @@ function sendHVDataToInflux() {
 //Citrix Method 
 function sendCitrixDataToInflux() {
     client.createDatabase().then(() => client.createRetentionPolicy(rpCtx, '2h')).then(() => {
-        let GetBrokermachine
+        let getBrokerMachine
         // make a get request to the url
         axios({
             method: 'get',
             url: ctxServerUrl + ctxServerVM,
             headers: { 'Accept': 'application/json' }, // this api needs this header set for the request
         }).then(res => {
-            GetBrokermachine = res.data;
-            if (Array.isArray(GetBrokermachine)) {
-                for (let i = 0; i < GetBrokermachine.length; i++) {
-                    client.write(ctxServerName)
-                        .tag({ app: [process.env.npm_package_name] })
-                        .field({
-                            "agentversion": GetBrokermachine[i].AgentVersion ? GetBrokermachine[i].AgentVersion : '',
-                            "ostype": GetBrokermachine[i].OSType ? GetBrokermachine[i].OSType : '',
-                            "vdimachinename": GetBrokermachine[i].MachineName ? GetBrokermachine[i].MachineName : '',
-                            "sessionclientaddress": GetBrokermachine[i].SessionClientAddress ? GetBrokermachine[i].SessionClientAddress : '',
-                            "sessionclientversion": GetBrokermachine[i].SessionClientVersion ? GetBrokermachine[i].SessionClientVersion : '',
-                            "sessionclientname": GetBrokermachine[i].SessionClientName ? GetBrokermachine[i].SessionClientName : '',
-                            "sessionusername": GetBrokermachine[i].SessionUserName ? GetBrokermachine[i].SessionUserName : '',
-                            "sessionprotocol": GetBrokermachine[i].SessionProtocol ? GetBrokermachine[i].SessionProtocol : '',
-                            "sessionstate": GetBrokermachine[i].SessionState ? GetBrokermachine[i].SessionState : 0.0,
-                            "vdiipaddress": GetBrokermachine[i].IPAddress ? GetBrokermachine[i].IPAddress : ''
-                        })
-                        .set({ RP: rpCtx })
-                        .then(() => { console.info('write point success(serverCitrixInformation)') })
-                        .catch(err => { console.error(err) });
-                }
-            } else {
-                client.write(ctxServerName)
-                    .tag({ app: [process.env.npm_package_name] })
-                    .field({
-                        "agentversion": GetBrokermachine.AgentVersion ? GetBrokermachine.AgentVersion : '',
-                        "ostype": GetBrokermachine.OSType ? GetBrokermachine.OSType : '',
-                        "vdimachinename": GetBrokermachine.MachineName ? GetBrokermachine.MachineName : '',
-                        "sessionclientaddress": GetBrokermachine.SessionClientAddress ? GetBrokermachine.SessionClientAddress : '',
-                        "sessionclientversion": GetBrokermachine.SessionClientVersion ? GetBrokermachine.SessionClientVersion : '',
-                        "sessionclientname": GetBrokermachine.SessionClientName ? GetBrokermachine.SessionClientName : '',
-                        "sessionusername": GetBrokermachine.SessionUserName ? GetBrokermachine.SessionUserName : '',
-                        "sessionprotocol": GetBrokermachine.SessionProtocol ? GetBrokermachine.SessionProtocol : '',
-                        "sessionstate": GetBrokermachine.SessionState ? GetBrokermachine.SessionState : 0.0,
-                        "vdiipaddress": GetBrokermachine.IPAddress ? GetBrokermachine.IPAddress : ''
-                    })
-                    .set({ RP: rpCtx })
-                    .then(() => { console.info('write point success(serverCitrixInformation)') })
-                    .catch(err => { console.error(err) });
-            }
+            getBrokerMachine = res.data;
+            sendDataToInflux(ctxServerName, getBrokerMachine, rpHV)
         }).catch(err => { console.error(err) })
     }).catch(err => { console.error(err) })
 }
@@ -153,40 +73,28 @@ function sendRDSDataToInflux() {
             headers: { 'Accept': 'application/json' }, // this api needs this header set for the request
         }).then(res => {
             rdsUserSession = res.data;
-            if (Array.isArray(rdsUserSession)) {
-                for (let i = 0; i < rdsUserSession.length; i++) {
-                    client.write(rdsServerName)
-                        .tag({ app: [process.env.npm_package_name] })
-                        .field({
-                            "servername": rdsUserSession[i].ServerName ? rdsUserSession[i].ServerName : '',
-                            "HostServer": rdsUserSession[i].HostServer ? rdsUserSession[i].HostServer : '',
-                            "username": rdsUserSession[i].UserName ? rdsUserSession[i].UserName : '',
-                            "serveripaddress": rdsUserSession[i].ServerIPAddress ? rdsUserSession[i].ServerIPAddress : '',
-                            "sessionstate": rdsUserSession[i].SessionState ? rdsUserSession[i].SessionState : 0.0,
-                            "CollectionName": rdsUserSession[i].CollectionName ? rdsUserSession[i].CollectionName : ''
-
-                        })
-                        .set({ RP: rpRDS })
-                        .then(() => { console.info('write point success(serverRDSInformation)') })
-                        .catch(err => { console.error(err) });
-                }
-            } else {
-                client.write(rdsServerName)
-                    .tag({ app: [process.env.npm_package_name] })
-                    .field({
-                        "servername": rdsUserSession.ServerName ? rdsUserSession.ServerName : '',
-                        "HostServer": rdsUserSession.HostServer ? rdsUserSession.HostServer : '',
-                        "username": rdsUserSession.UserName ? rdsUserSession.UserName : '',
-                        "serveripaddress": rdsUserSession.ServerIPAddress ? rdsUserSession.ServerIPAddress : '',
-                        "sessionstate": rdsUserSession.SessionState ? rdsUserSession.SessionState : 0.0,
-                        "CollectionName": rdsUserSession.CollectionName ? rdsUserSession.CollectionName : ''
-                    })
-                    .set({ RP: rpRDS })
-                    .then(() => { console.info('write point success(serverRDSInformation)') })
-                    .catch(err => { console.error(err) });
-            }
+            sendDataToInflux(rdsServerName, rdsUserSession, rpHV)
         }).catch(err => { console.error(err) })
     }).catch(err => { console.error(err) })
+}
+
+function sendDataToInflux(serverName, myRawData, myRP) {
+    if (myRawData && !Array.isArray(myRawData)) {
+        myRawData = [myRawData]
+    }
+    for (let i = 0; i < myRawData.length; i++) {
+        let myKeyData = Object.keys(myRawData[i])
+        let myValueData = Object.values(myRawData[i])
+        let myFieldData = {}
+        myKeyData.forEach((myKey, i) => myFieldData[myKey] = (myValueData[i] ?  myValueData[i] : ''));
+
+        client.write(serverName)
+            .tag({ app: [process.env.npm_package_name] })
+            .field(myFieldData)
+            .set({ RP: myRP })
+            .then(() => { console.info(serverName + ' write point success') })
+            .catch(err => { console.error(err) });
+    }
 }
 
 function sendServerHealthToInflux(server, rp, serverName) {
