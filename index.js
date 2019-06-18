@@ -26,6 +26,7 @@ const serverMB = "diskusage"
 function sendHVDataToInflux() {
     client.createDatabase().then(() => client.createRetentionPolicy(rpHV, '2h')).then(() => {
         let namesData
+        let sessionData
         // make a get request to the url
         axios({
             method: 'get',
@@ -57,7 +58,7 @@ function sendCitrixDataToInflux() {
             headers: { 'Accept': 'application/json' }, // this api needs this header set for the request
         }).then(res => {
             getBrokerMachine = res.data;
-            sendDataToInflux(ctxServerName, getBrokerMachine, rpHV)
+            sendDataToInflux(ctxServerName, getBrokerMachine, rpCtx)
         }).catch(err => { console.error(err) })
     }).catch(err => { console.error(err) })
 }
@@ -73,7 +74,7 @@ function sendRDSDataToInflux() {
             headers: { 'Accept': 'application/json' }, // this api needs this header set for the request
         }).then(res => {
             rdsUserSession = res.data;
-            sendDataToInflux(rdsServerName, rdsUserSession, rpHV)
+            sendDataToInflux(rdsServerName, rdsUserSession, rpRDS)
         }).catch(err => { console.error(err) })
     }).catch(err => { console.error(err) })
 }
@@ -86,7 +87,7 @@ function sendDataToInflux(serverName, myRawData, myRP) {
         let myKeyData = Object.keys(myRawData[i])
         let myValueData = Object.values(myRawData[i])
         let myFieldData = {}
-        myKeyData.forEach((myKey, i) => myFieldData[myKey] = (myValueData[i] ?  myValueData[i] : ''));
+        myKeyData.forEach((myKey, k) => myFieldData[myKey] = ((myValueData[k] != undefined && myValueData[k] != null && !Array.isArray(myValueData[k])) ? myValueData[k] : ''))
 
         client.write(serverName)
             .tag({ app: [process.env.npm_package_name] })
