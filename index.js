@@ -1,3 +1,7 @@
+exports.sendHVDataToInflux = sendHVDataToInflux
+exports.sendCitrixDataToInflux = sendCitrixDataToInflux
+exports.sendRDSDataToInflux = sendRDSDataToInflux
+
 const Influx = require('influxdb-nodejs')
 const client = new Influx('http://10.2.138.212:8086/mydb')
 const axios = require('axios')
@@ -42,9 +46,9 @@ function sendHVDataToInflux(callback) {
             }).then(res => {
                 sessionData = res.data;
                 async.parallel([
-                    function(cb) { sendDataToInflux(hvServerName, namesData, rpHV, cb) },
-                    function(cb) { sendDataToInflux(hvServerName, sessionData, rpHV, cb) }
-                ], function(err, results) {
+                    function (cb) { sendDataToInflux(hvServerName, namesData, rpHV, cb) },
+                    function (cb) { sendDataToInflux(hvServerName, sessionData, rpHV, cb) }
+                ], function (err, results) {
                     if (callback && results && results.length > 1)
                         callback(null, results[0] && results[1])
                 })
