@@ -1,6 +1,7 @@
 const Influx = require('influxdb-nodejs')
 const client = new Influx('http://10.2.138.212:8086/mydb')
 const axios = require('axios')
+const async = require('async')
 
 const hvServerName = "hview77.sup.praim.com"
 const hvServerUrl = "http://" + hvServerName + ":8000/"
@@ -23,7 +24,7 @@ const serverIO = "diskio"
 const serverMB = "diskusage"
 
 //HV Method 
-function sendHVDataToInflux() {
+function sendHVDataToInflux(callback) {
     client.createDatabase().then(() => client.createRetentionPolicy(rpHV, '2h')).then(() => {
         let namesData
         let sessionData
@@ -40,15 +41,20 @@ function sendHVDataToInflux() {
                 headers: { 'Accept': 'application/json' },
             }).then(res => {
                 sessionData = res.data;
-                sendDataToInflux(hvServerName, namesData, rpHV)
-                sendDataToInflux(hvServerName, sessionData, rpHV)
-            }).catch(err => { console.error(err) })
-        }).catch(err => { console.error(err) })
-    }).catch(err => { console.error(err) })
+                async.parallel([
+                    function(cb) { sendDataToInflux(hvServerName, namesData, rpHV, cb) },
+                    function(cb) { sendDataToInflux(hvServerName, sessionData, rpHV, cb) }
+                ], function(err, results) {
+                    if (callback && results && results.length > 1)
+                        callback(null, results[0] && results[1])
+                })
+            }).catch(err => { console.error(err); return false })
+        }).catch(err => { console.error(err); return false })
+    }).catch(err => { console.error(err); return false })
 }
 
 //Citrix Method 
-function sendCitrixDataToInflux() {
+function sendCitrixDataToInflux(callback) {
     client.createDatabase().then(() => client.createRetentionPolicy(rpCtx, '2h')).then(() => {
         let getBrokerMachine
         // make a get request to the url
@@ -58,13 +64,13 @@ function sendCitrixDataToInflux() {
             headers: { 'Accept': 'application/json' }, // this api needs this header set for the request
         }).then(res => {
             getBrokerMachine = res.data;
-            sendDataToInflux(ctxServerName, getBrokerMachine, rpCtx)
-        }).catch(err => { console.error(err) })
-    }).catch(err => { console.error(err) })
+            sendDataToInflux(ctxServerName, getBrokerMachine, rpCtx, callback)
+        }).catch(err => { console.error(err); return false })
+    }).catch(err => { console.error(err); return false })
 }
 
 //RDS Method
-function sendRDSDataToInflux() {
+function sendRDSDataToInflux(callback) {
     client.createDatabase().then(() => client.createRetentionPolicy(rpRDS, '2h')).then(() => {
         let rdsUserSession
         // make a get request to the url
@@ -74,12 +80,13 @@ function sendRDSDataToInflux() {
             headers: { 'Accept': 'application/json' }, // this api needs this header set for the request
         }).then(res => {
             rdsUserSession = res.data;
-            sendDataToInflux(rdsServerName, rdsUserSession, rpRDS)
-        }).catch(err => { console.error(err) })
-    }).catch(err => { console.error(err) })
+            sendDataToInflux(rdsServerName, rdsUserSession, rpRDS, callback)
+        }).catch(err => { console.error(err); return false })
+    }).catch(err => { console.error(err); return false })
 }
 
-function sendDataToInflux(serverName, myRawData, myRP) {
+//Influx Method
+function sendDataToInflux(serverName, myRawData, myRP, callback) {
     if (myRawData && !Array.isArray(myRawData)) {
         myRawData = [myRawData]
     }
@@ -93,8 +100,12 @@ function sendDataToInflux(serverName, myRawData, myRP) {
             .tag({ app: [process.env.npm_package_name] })
             .field(myFieldData)
             .set({ RP: myRP })
-            .then(() => { console.info(serverName + ' write point success') })
-            .catch(err => { console.error(err) });
+            .queue()
+    }
+    if (client.writeQueueLength > 0) {
+        client.syncWrite()
+            .then(() => { console.info(serverName + ' write queue success'); if (callback) callback(null, true) })
+            .catch(err => { console.error(err); if (callback) callback(null, false) })
     }
 }
 
